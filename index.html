@@ -2,37 +2,77 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Unity Alpha Sprite Sheet Gen</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Unity Alpha Sprite Sheet Generator</title>
 
-    <script>
-        if (!window.crossOriginIsolated) {
-            if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
-                const swUrl = 'coi-serviceworker.js';
-                navigator.serviceWorker.register(swUrl).then(registration => {
-                    registration.addEventListener('updatefound', () => {
-                        location.reload();
-                    });
-                    if (registration.active) {
-                        location.reload();
-                    }
-                });
-            }
-        }
-    </script>
+    <script src="coi-serviceworker.js"></script>
 
     <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js"></script>
 
     <style>
-        body { font-family: 'Segoe UI', sans-serif; background: #121212; color: #e0e0e0; display: flex; flex-direction: column; align-items: center; padding: 40px; }
-        .card { background: #1e1e1e; border: 1px solid #333; border-radius: 12px; padding: 24px; width: 100%; max-width: 450px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            background: #121212; 
+            color: #e0e0e0; 
+            display: flex; 
+            flex-direction: column; 
+            align-items: center; 
+            padding: 40px; 
+        }
+        .card { 
+            background: #1e1e1e; 
+            border: 1px solid #333; 
+            border-radius: 12px; 
+            padding: 24px; 
+            width: 100%; 
+            max-width: 450px; 
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5); 
+        }
+        h2 { margin-top: 0; color: #fff; font-weight: 500; text-align: center; }
         .field { margin-bottom: 18px; }
-        label { display: block; font-size: 12px; text-transform: uppercase; color: #888; margin-bottom: 6px; letter-spacing: 1px; }
-        input { width: 100%; padding: 10px; background: #252525; border: 1px solid #333; color: #fff; border-radius: 6px; box-sizing: border-box; }
-        button { width: 100%; padding: 14px; background: #05a; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; }
-        button:hover { background: #007bff; }
-        #status { margin-top: 15px; font-size: 13px; color: #00ffcc; text-align: center; }
-        #output { margin-top: 30px; display: none; text-align: center; }
-        img { max-width: 100%; border: 2px solid #333; background-image: linear-gradient(45deg, #222 25%, transparent 25%), linear-gradient(-45deg, #222 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #222 75%), linear-gradient(-45deg, transparent 75%, #222 75%); background-size: 20px 20px; }
+        label { display: block; font-size: 11px; text-transform: uppercase; color: #888; margin-bottom: 6px; letter-spacing: 1px; }
+        input { 
+            width: 100%; 
+            padding: 10px; 
+            background: #252525; 
+            border: 1px solid #333; 
+            color: #fff; 
+            border-radius: 6px; 
+            box-sizing: border-box; 
+        }
+        input[type="file"] { border: 1px dashed #444; cursor: pointer; }
+        button { 
+            width: 100%; 
+            padding: 14px; 
+            background: #0066ff; 
+            color: white; 
+            border: none; 
+            border-radius: 6px; 
+            font-weight: bold; 
+            cursor: pointer; 
+            transition: 0.2s; 
+        }
+        button:hover { background: #0052cc; }
+        button:disabled { background: #444; cursor: wait; }
+        #status { 
+            margin-top: 15px; 
+            font-size: 13px; 
+            color: #00ffcc; 
+            text-align: center; 
+            font-family: monospace;
+        }
+        #output { margin-top: 30px; display: none; text-align: center; width: 100%; }
+        /* Checkerboard background to visualize transparency */
+        #preview { 
+            max-width: 100%; 
+            border: 2px solid #444; 
+            background-image: linear-gradient(45deg, #222 25%, transparent 25%), 
+                              linear-gradient(-45deg, #222 25%, transparent 25%), 
+                              linear-gradient(45deg, transparent 75%, #222 75%), 
+                              linear-gradient(-45deg, transparent 75%, #222 75%);
+            background-size: 20px 20px;
+            background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+        }
     </style>
 </head>
 <body>
@@ -53,52 +93,85 @@
             <input type="number" id="frameCount" value="16">
         </div>
     </div>
-    <button id="startBtn">Build PNG Sprite Sheet</button>
-    <div id="status">Initializing Engine... (If stuck, refresh)</div>
+    <button id="startBtn">Build Transparent Sprite Sheet</button>
+    <div id="status">Initializing Engine...</div>
 </div>
 
 <div id="output">
-    <label>Result (Right-click to save)</label><br>
+    <label>Right-click to save PNG</label><br>
     <img id="preview">
 </div>
 
 <script>
     const { createFFmpeg, fetchFile } = FFmpeg;
+    // Log is set to true so you can see progress in the F12 console
     const ffmpeg = createFFmpeg({ log: true });
 
-    async function init() {
+    const startBtn = document.getElementById('startBtn');
+    const status = document.getElementById('status');
+    const preview = document.getElementById('preview');
+    const outputDiv = document.getElementById('output');
+
+    // Initialize FFmpeg
+    async function loadEngine() {
         try {
             await ffmpeg.load();
-            document.getElementById('status').innerText = "Ready";
+            status.innerText = "Ready";
         } catch (e) {
-            document.getElementById('status').innerText = "Error: Security block. Try refreshing.";
+            console.error(e);
+            status.innerText = "Error: Security Block. Try a hard refresh (Ctrl+F5).";
         }
     }
 
-    init();
+    loadEngine();
 
-    document.getElementById('startBtn').onclick = async () => {
+    startBtn.onclick = async () => {
         const file = document.getElementById('videoFile').files[0];
-        const cols = document.getElementById('cols').value;
-        const total = document.getElementById('frameCount').value;
+        const cols = parseInt(document.getElementById('cols').value);
+        const total = parseInt(document.getElementById('frameCount').value);
 
-        if (!file) return alert("Select a file");
+        if (!file) {
+            alert("Please select a WebM or MOV video first.");
+            return;
+        }
 
-        document.getElementById('status').innerText = "Processing...";
-        ffmpeg.FS('writeFile', 'input', await fetchFile(file));
+        startBtn.disabled = true;
+        status.innerText = "Processing Alpha Channels...";
 
-        await ffmpeg.run(
-            '-i', 'input',
-            '-vf', `tile=${cols}x${Math.ceil(total/cols)}`,
-            '-frames:v', '1',
-            'sheet.png'
-        );
+        // Write file to FFmpeg virtual memory
+        ffmpeg.FS('writeFile', 'input_video', await fetchFile(file));
 
-        const data = ffmpeg.FS('readFile', 'sheet.png');
-        document.getElementById('preview').src = URL.createObjectURL(new Blob([data.buffer], { type: 'image/png' }));
-        document.getElementById('output').style.display = 'block';
-        document.getElementById('status').innerText = "Done!";
+        // Calculate rows
+        const rows = Math.ceil(total / cols);
+
+        try {
+            // THE FFMPEG COMMAND
+            // -pix_fmt rgba is the key for transparency!
+            await ffmpeg.run(
+                '-i', 'input_video',
+                '-vf', `tile=${cols}x${rows}`,
+                '-frames:v', '1',
+                '-pix_fmt', 'rgba', 
+                'output_sheet.png'
+            );
+
+            // Read the result
+            const data = ffmpeg.FS('readFile', 'output_sheet.png');
+            
+            // Create a URL for the image
+            const url = URL.createObjectURL(new Blob([data.buffer], { type: 'image/png' }));
+            
+            preview.src = url;
+            outputDiv.style.display = 'block';
+            status.innerText = "Success! Transparency Preserved.";
+        } catch (err) {
+            console.error(err);
+            status.innerText = "Error during processing. Check console (F12).";
+        } finally {
+            startBtn.disabled = false;
+        }
     };
 </script>
+
 </body>
 </html>
