@@ -3,66 +3,25 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Unity Alpha Sprite Sheet Generator</title>
+    <title>Unity Alpha Sprite Sheet Gen</title>
 
     <script src="coi-serviceworker.js"></script>
 
     <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js"></script>
 
     <style>
-        body { 
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
-            background: #121212; 
-            color: #e0e0e0; 
-            display: flex; 
-            flex-direction: column; 
-            align-items: center; 
-            padding: 40px; 
-        }
-        .card { 
-            background: #1e1e1e; 
-            border: 1px solid #333; 
-            border-radius: 12px; 
-            padding: 24px; 
-            width: 100%; 
-            max-width: 450px; 
-            box-shadow: 0 10px 30px rgba(0,0,0,0.5); 
-        }
-        h2 { margin-top: 0; color: #fff; font-weight: 500; text-align: center; }
+        body { font-family: 'Segoe UI', sans-serif; background: #121212; color: #e0e0e0; display: flex; flex-direction: column; align-items: center; padding: 40px; }
+        .card { background: #1e1e1e; border: 1px solid #333; border-radius: 12px; padding: 24px; width: 100%; max-width: 450px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        h2 { margin-top: 0; color: #fff; text-align: center; }
         .field { margin-bottom: 18px; }
         label { display: block; font-size: 11px; text-transform: uppercase; color: #888; margin-bottom: 6px; letter-spacing: 1px; }
-        input { 
-            width: 100%; 
-            padding: 10px; 
-            background: #252525; 
-            border: 1px solid #333; 
-            color: #fff; 
-            border-radius: 6px; 
-            box-sizing: border-box; 
-        }
-        input[type="file"] { border: 1px dashed #444; cursor: pointer; }
-        button { 
-            width: 100%; 
-            padding: 14px; 
-            background: #0066ff; 
-            color: white; 
-            border: none; 
-            border-radius: 6px; 
-            font-weight: bold; 
-            cursor: pointer; 
-            transition: 0.2s; 
-        }
+        input { width: 100%; padding: 10px; background: #252525; border: 1px solid #333; color: #fff; border-radius: 6px; box-sizing: border-box; }
+        button { width: 100%; padding: 14px; background: #0066ff; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; }
         button:hover { background: #0052cc; }
         button:disabled { background: #444; cursor: wait; }
-        #status { 
-            margin-top: 15px; 
-            font-size: 13px; 
-            color: #00ffcc; 
-            text-align: center; 
-            font-family: monospace;
-        }
-        #output { margin-top: 30px; display: none; text-align: center; width: 100%; }
-        /* Checkerboard background to visualize transparency */
+        #status { margin-top: 15px; font-size: 13px; color: #00ffcc; text-align: center; font-family: monospace; }
+        #output { margin-top: 30px; display: none; text-align: center; }
+        /* The checkerboard grid visually confirms transparency */
         #preview { 
             max-width: 100%; 
             border: 2px solid #444; 
@@ -71,7 +30,6 @@
                               linear-gradient(45deg, transparent 75%, #222 75%), 
                               linear-gradient(-45deg, transparent 75%, #222 75%);
             background-size: 20px 20px;
-            background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
         }
     </style>
 </head>
@@ -80,7 +38,7 @@
 <div class="card">
     <h2>Sprite Sheet Gen</h2>
     <div class="field">
-        <label>Video Input (WebM/VP8 Alpha)</label>
+        <label>Video Input (WebM with Alpha)</label>
         <input type="file" id="videoFile" accept=".webm,.mov">
     </div>
     <div style="display: flex; gap: 10px;">
@@ -98,80 +56,77 @@
 </div>
 
 <div id="output">
-    <label>Right-click to save PNG</label><br>
+    <label>Right-click image to save PNG</label><br>
     <img id="preview">
 </div>
 
 <script>
     const { createFFmpeg, fetchFile } = FFmpeg;
-    // Log is set to true so you can see progress in the F12 console
     const ffmpeg = createFFmpeg({ log: true });
 
-    const startBtn = document.getElementById('startBtn');
-    const status = document.getElementById('status');
-    const preview = document.getElementById('preview');
-    const outputDiv = document.getElementById('output');
-
-    // Initialize FFmpeg
     async function loadEngine() {
         try {
             await ffmpeg.load();
-            status.innerText = "Ready";
+            document.getElementById('status').innerText = "Ready";
         } catch (e) {
-            console.error(e);
-            status.innerText = "Error: Security Block. Try a hard refresh (Ctrl+F5).";
+            document.getElementById('status').innerText = "Error: Security block. Refresh page.";
         }
     }
-
     loadEngine();
 
-    startBtn.onclick = async () => {
+    document.getElementById('startBtn').onclick = async () => {
         const file = document.getElementById('videoFile').files[0];
         const cols = parseInt(document.getElementById('cols').value);
         const total = parseInt(document.getElementById('frameCount').value);
 
-        if (!file) {
-            alert("Please select a WebM or MOV video first.");
-            return;
-        }
+        if (!file) return alert("Select a video file");
 
-        startBtn.disabled = true;
-        status.innerText = "Processing Alpha Channels...";
+        document.getElementById('startBtn').disabled = true;
+        document.getElementById('status').innerText = "Decoding Alpha...";
 
-        // Write file to FFmpeg virtual memory
-        ffmpeg.FS('writeFile', 'input_video', await fetchFile(file));
-
-        // Calculate rows
-        const rows = Math.ceil(total / cols);
+        ffmpeg.FS('writeFile', 'input', await fetchFile(file));
 
         try {
-            // THE FFMPEG COMMAND
-            // -pix_fmt rgba is the key for transparency!
+            /**
+             * THE KEY FIX: 
+             * 1. We force the 'libvpx' decoder BEFORE the input (-c:v libvpx)
+             * 2. We use 'format=yuva420p' in filters to ensure the alpha plane is active
+             * 3. We output as '-pix_fmt rgba' for the final PNG
+             */
             await ffmpeg.run(
-                '-i', 'input_video',
-                '-vf', `tile=${cols}x${rows}`,
+                '-vcodec', 'libvpx',       // Force decoder for VP8 transparency
+                '-i', 'input',
+                '-vf', `format=yuva420p,tile=${cols}x${Math.ceil(total/cols)}`,
                 '-frames:v', '1',
                 '-pix_fmt', 'rgba', 
-                'output_sheet.png'
+                'sheet.png'
             );
 
-            // Read the result
-            const data = ffmpeg.FS('readFile', 'output_sheet.png');
-            
-            // Create a URL for the image
-            const url = URL.createObjectURL(new Blob([data.buffer], { type: 'image/png' }));
-            
-            preview.src = url;
-            outputDiv.style.display = 'block';
-            status.innerText = "Success! Transparency Preserved.";
+            const data = ffmpeg.FS('readFile', 'sheet.png');
+            document.getElementById('preview').src = URL.createObjectURL(new Blob([data.buffer], { type: 'image/png' }));
+            document.getElementById('output').style.display = 'block';
+            document.getElementById('status').innerText = "Success! Saved with Alpha.";
         } catch (err) {
             console.error(err);
-            status.innerText = "Error during processing. Check console (F12).";
+            document.getElementById('status').innerText = "Failed. Trying VP9 decoder...";
+            
+            // Fallback for VP9 WebMs
+            await ffmpeg.run(
+                '-vcodec', 'libvpx-vp9', 
+                '-i', 'input',
+                '-vf', `format=yuva420p,tile=${cols}x${Math.ceil(total/cols)}`,
+                '-frames:v', '1',
+                '-pix_fmt', 'rgba', 
+                'sheet.png'
+            );
+            const data = ffmpeg.FS('readFile', 'sheet.png');
+            document.getElementById('preview').src = URL.createObjectURL(new Blob([data.buffer], { type: 'image/png' }));
+            document.getElementById('output').style.display = 'block';
+            document.getElementById('status').innerText = "Success! (VP9)";
         } finally {
-            startBtn.disabled = false;
+            document.getElementById('startBtn').disabled = false;
         }
     };
 </script>
-
 </body>
 </html>
