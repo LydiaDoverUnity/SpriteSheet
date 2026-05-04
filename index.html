@@ -2,26 +2,37 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Unity-Ready Alpha Sprite Sheet Gen</title>
-    <script src="coi-serviceworker.js"></script> 
-    
+    <title>Unity Alpha Sprite Sheet Gen</title>
+
+    <script>
+        if (!window.crossOriginIsolated) {
+            if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+                const swUrl = 'coi-serviceworker.js';
+                navigator.serviceWorker.register(swUrl).then(registration => {
+                    registration.addEventListener('updatefound', () => {
+                        location.reload();
+                    });
+                    if (registration.active) {
+                        location.reload();
+                    }
+                });
+            }
+        }
+    </script>
+
     <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js"></script>
 
     <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #121212; color: #e0e0e0; display: flex; flex-direction: column; align-items: center; padding: 40px; }
+        body { font-family: 'Segoe UI', sans-serif; background: #121212; color: #e0e0e0; display: flex; flex-direction: column; align-items: center; padding: 40px; }
         .card { background: #1e1e1e; border: 1px solid #333; border-radius: 12px; padding: 24px; width: 100%; max-width: 450px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
-        h2 { margin-top: 0; color: #fff; font-weight: 500; }
         .field { margin-bottom: 18px; }
         label { display: block; font-size: 12px; text-transform: uppercase; color: #888; margin-bottom: 6px; letter-spacing: 1px; }
-        input[type="file"] { background: #252525; padding: 10px; width: 100%; box-sizing: border-box; border-radius: 6px; border: 1px dashed #444; }
-        input[type="number"] { width: 100%; padding: 10px; background: #252525; border: 1px solid #333; color: #fff; border-radius: 6px; box-sizing: border-box; }
-        button { width: 100%; padding: 14px; background: #05a; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; transition: 0.2s; }
+        input { width: 100%; padding: 10px; background: #252525; border: 1px solid #333; color: #fff; border-radius: 6px; box-sizing: border-box; }
+        button { width: 100%; padding: 14px; background: #05a; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; }
         button:hover { background: #007bff; }
-        button:disabled { background: #444; cursor: wait; }
-        #status { margin-top: 15px; font-size: 13px; color: #00ffcc; text-align: center; height: 20px; }
+        #status { margin-top: 15px; font-size: 13px; color: #00ffcc; text-align: center; }
         #output { margin-top: 30px; display: none; text-align: center; }
-        canvas { display: none; }
-        img { max-width: 100%; border: 2px solid #333; background: repeating-conic-gradient(#222 0% 25%, #333 0% 50%) 50% / 20px 20px; }
+        img { max-width: 100%; border: 2px solid #333; background-image: linear-gradient(45deg, #222 25%, transparent 25%), linear-gradient(-45deg, #222 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #222 75%), linear-gradient(-45deg, transparent 75%, #222 75%); background-size: 20px 20px; }
     </style>
 </head>
 <body>
@@ -43,56 +54,50 @@
         </div>
     </div>
     <button id="startBtn">Build PNG Sprite Sheet</button>
-    <div id="status">Ready</div>
+    <div id="status">Initializing Engine... (If stuck, refresh)</div>
 </div>
 
 <div id="output">
-    <label>Resulting Sprite Sheet (Right-click to save)</label><br>
+    <label>Result (Right-click to save)</label><br>
     <img id="preview">
 </div>
 
 <script>
     const { createFFmpeg, fetchFile } = FFmpeg;
-    const ffmpeg = createFFmpeg({ log: false });
+    const ffmpeg = createFFmpeg({ log: true });
 
-    const startBtn = document.getElementById('startBtn');
-    const status = document.getElementById('status');
+    async function init() {
+        try {
+            await ffmpeg.load();
+            document.getElementById('status').innerText = "Ready";
+        } catch (e) {
+            document.getElementById('status').innerText = "Error: Security block. Try refreshing.";
+        }
+    }
 
-    startBtn.onclick = async () => {
+    init();
+
+    document.getElementById('startBtn').onclick = async () => {
         const file = document.getElementById('videoFile').files[0];
         const cols = document.getElementById('cols').value;
         const total = document.getElementById('frameCount').value;
 
-        if (!file) return alert("Please select a video file first.");
+        if (!file) return alert("Select a file");
 
-        startBtn.disabled = true;
-        status.innerText = "Initializing Engine...";
+        document.getElementById('status').innerText = "Processing...";
+        ffmpeg.FS('writeFile', 'input', await fetchFile(file));
 
-        if (!ffmpeg.isLoaded()) await ffmpeg.load();
-
-        status.innerText = "Extracting Alpha Frames...";
-        ffmpeg.FS('writeFile', 'input.webm', await fetchFile(file));
-
-        // Command details:
-        // -vframes: Limit to total frames
-        // tile: Create the grid automatically using the tile filter
-        // format=rgba: Force transparency preservation
         await ffmpeg.run(
-            '-i', 'input.webm',
+            '-i', 'input',
             '-vf', `tile=${cols}x${Math.ceil(total/cols)}`,
             '-frames:v', '1',
-            '-pix_fmt', 'rgba',
             'sheet.png'
         );
 
-        status.innerText = "Finalizing...";
         const data = ffmpeg.FS('readFile', 'sheet.png');
-        const url = URL.createObjectURL(new Blob([data.buffer], { type: 'image/png' }));
-        
-        document.getElementById('preview').src = url;
+        document.getElementById('preview').src = URL.createObjectURL(new Blob([data.buffer], { type: 'image/png' }));
         document.getElementById('output').style.display = 'block';
-        status.innerText = "Complete!";
-        startBtn.disabled = false;
+        document.getElementById('status').innerText = "Done!";
     };
 </script>
 </body>
