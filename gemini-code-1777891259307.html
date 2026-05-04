@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Unity-Ready Alpha Sprite Sheet Gen</title>
+    <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #121212; color: #e0e0e0; display: flex; flex-direction: column; align-items: center; padding: 40px; }
+        .card { background: #1e1e1e; border: 1px solid #333; border-radius: 12px; padding: 24px; width: 100%; max-width: 450px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        h2 { margin-top: 0; color: #fff; font-weight: 500; }
+        .field { margin-bottom: 18px; }
+        label { display: block; font-size: 12px; text-transform: uppercase; color: #888; margin-bottom: 6px; letter-spacing: 1px; }
+        input[type="file"] { background: #252525; padding: 10px; width: 100%; box-sizing: border-box; border-radius: 6px; border: 1px dashed #444; }
+        input[type="number"] { width: 100%; padding: 10px; background: #252525; border: 1px solid #333; color: #fff; border-radius: 6px; box-sizing: border-box; }
+        button { width: 100%; padding: 14px; background: #05a; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; transition: 0.2s; }
+        button:hover { background: #007bff; }
+        button:disabled { background: #444; cursor: wait; }
+        #status { margin-top: 15px; font-size: 13px; color: #00ffcc; text-align: center; height: 20px; }
+        #output { margin-top: 30px; display: none; text-align: center; }
+        canvas { display: none; }
+        img { max-width: 100%; border: 2px solid #333; background: repeating-conic-gradient(#222 0% 25%, #333 0% 50%) 50% / 20px 20px; }
+    </style>
+</head>
+<body>
+
+<div class="card">
+    <h2>Sprite Sheet Gen</h2>
+    <div class="field">
+        <label>Video Input (WebM/VP8 Alpha)</label>
+        <input type="file" id="videoFile" accept=".webm,.mov">
+    </div>
+    <div style="display: flex; gap: 10px;">
+        <div class="field" style="flex: 1;">
+            <label>Columns</label>
+            <input type="number" id="cols" value="4">
+        </div>
+        <div class="field" style="flex: 1;">
+            <label>Total Frames</label>
+            <input type="number" id="frameCount" value="16">
+        </div>
+    </div>
+    <button id="startBtn">Build PNG Sprite Sheet</button>
+    <div id="status">Ready</div>
+</div>
+
+<div id="output">
+    <label>Resulting Sprite Sheet (Right-click to save)</label><br>
+    <img id="preview">
+</div>
+
+<script>
+    const { createFFmpeg, fetchFile } = FFmpeg;
+    const ffmpeg = createFFmpeg({ log: false });
+
+    const startBtn = document.getElementById('startBtn');
+    const status = document.getElementById('status');
+
+    startBtn.onclick = async () => {
+        const file = document.getElementById('videoFile').files[0];
+        const cols = document.getElementById('cols').value;
+        const total = document.getElementById('frameCount').value;
+
+        if (!file) return alert("Please select a video file first.");
+
+        startBtn.disabled = true;
+        status.innerText = "Initializing Engine...";
+
+        if (!ffmpeg.isLoaded()) await ffmpeg.load();
+
+        status.innerText = "Extracting Alpha Frames...";
+        ffmpeg.FS('writeFile', 'input.webm', await fetchFile(file));
+
+        // Command details:
+        // -vframes: Limit to total frames
+        // tile: Create the grid automatically using the tile filter
+        // format=rgba: Force transparency preservation
+        await ffmpeg.run(
+            '-i', 'input.webm',
+            '-vf', `tile=${cols}x${Math.ceil(total/cols)}`,
+            '-frames:v', '1',
+            '-pix_fmt', 'rgba',
+            'sheet.png'
+        );
+
+        status.innerText = "Finalizing...";
+        const data = ffmpeg.FS('readFile', 'sheet.png');
+        const url = URL.createObjectURL(new Blob([data.buffer], { type: 'image/png' }));
+        
+        document.getElementById('preview').src = url;
+        document.getElementById('output').style.display = 'block';
+        status.innerText = "Complete!";
+        startBtn.disabled = false;
+    };
+</script>
+</body>
+</html>
