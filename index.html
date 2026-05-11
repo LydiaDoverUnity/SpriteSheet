@@ -2,44 +2,50 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Unity Alpha Sprite Sheet Gen v3</title>
-    <script src="coi-serviceworker.js"></script>
+    <title>Unity Alpha Sprite Sheet Gen v3.1</title>
+    
+    <script>
+        if (!window.crossOriginIsolated) {
+            console.log("Security headers missing. Attempting to register Service Worker...");
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.register('coi-serviceworker.js').then(() => {
+                    // Once registered, we MUST reload to activate the headers
+                    setTimeout(() => { window.location.reload(); }, 500);
+                }).catch(err => {
+                    console.error("Worker failed:", err);
+                });
+            }
+        }
+    </script>
+
     <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js"></script>
+
     <style>
-        body { font-family: 'Segoe UI', sans-serif; background: #121212; color: #e0e0e0; display: flex; flex-direction: column; align-items: center; padding: 20px; }
-        .card { background: #1e1e1e; border: 1px solid #333; border-radius: 12px; padding: 24px; width: 100%; max-width: 500px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
-        h2 { margin-top: 0; color: #fff; text-align: center; font-size: 1.2em; }
+        body { font-family: 'Segoe UI', sans-serif; background: #0b0b0b; color: #e0e0e0; display: flex; flex-direction: column; align-items: center; padding: 20px; }
+        .card { background: #161616; border: 1px solid #333; border-radius: 12px; padding: 24px; width: 100%; max-width: 500px; box-shadow: 0 10px 30px rgba(0,0,0,0.8); }
+        h2 { margin-top: 0; color: #fff; text-align: center; font-size: 1.2em; letter-spacing: 1px; }
         .grid-inputs { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px; }
         .field { margin-bottom: 15px; }
         label { display: block; font-size: 10px; text-transform: uppercase; color: #888; margin-bottom: 4px; letter-spacing: 1px; }
-        input, select { width: 100%; padding: 10px; background: #252525; border: 1px solid #333; color: #fff; border-radius: 6px; box-sizing: border-box; font-size: 13px; }
-        button { width: 100%; padding: 14px; background: #0066ff; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; margin-top: 10px; }
+        input, select { width: 100%; padding: 12px; background: #222; border: 1px solid #444; color: #fff; border-radius: 6px; box-sizing: border-box; }
+        button { width: 100%; padding: 16px; background: #0066ff; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; margin-top: 10px; font-size: 14px; }
         button:hover { background: #0052cc; }
-        button:disabled { background: #444; cursor: not-allowed; }
-        
-        /* Progress Bar Styles */
+        button:disabled { background: #333; color: #777; cursor: not-allowed; }
         .progress-container { margin-top: 20px; display: none; width: 100%; }
-        .progress-bg { background: #333; height: 12px; border-radius: 6px; overflow: hidden; width: 100%; }
-        #progress-fill { background: #00ffcc; height: 100%; width: 0%; transition: width 0.2s; }
-        #percent-text { display: block; text-align: center; font-size: 12px; margin-top: 5px; color: #00ffcc; }
-
-        #status { margin-top: 15px; font-size: 12px; color: #bbb; text-align: center; font-family: monospace; min-height: 1.2em; }
+        .progress-bg { background: #333; height: 8px; border-radius: 4px; overflow: hidden; }
+        #progress-fill { background: #00ffcc; height: 100%; width: 0%; transition: width 0.3s ease; }
+        #status { margin-top: 15px; font-size: 11px; color: #00ffcc; text-align: center; font-family: monospace; }
         #output { margin-top: 30px; display: none; text-align: center; width: 100%; }
-        #preview { 
-            max-width: 100%; border: 2px solid #444; 
-            background-image: linear-gradient(45deg, #222 25%, transparent 25%), linear-gradient(-45deg, #222 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #222 75%), linear-gradient(-45deg, transparent 75%, #222 75%);
-            background-size: 20px 20px;
-        }
+        #preview { max-width: 100%; border: 2px solid #444; background: repeating-conic-gradient(#111 0% 25%, #222 0% 50%) 50% / 20px 20px; }
     </style>
 </head>
 <body>
 
 <div class="card">
-    <h2>Sprite Sheet Gen v3</h2>
+    <h2>Sprite Sheet Gen v3.1</h2>
     
     <div class="field">
-        <label>Video Input</label>
+        <label>Video Input (WebM/MOV)</label>
         <input type="file" id="videoFile" accept=".webm,.mov">
     </div>
 
@@ -49,8 +55,8 @@
             <input type="number" id="cols" value="4">
         </div>
         <div class="field">
-            <label>Frame Step</label>
-            <input type="number" id="step" value="1" min="1">
+            <label>Frame Step (Skip)</label>
+            <input type="number" id="step" value="1">
         </div>
     </div>
 
@@ -60,90 +66,85 @@
             <input type="number" id="frameCount" value="16">
         </div>
         <div class="field">
-            <label>Compression</label>
+            <label>Quality</label>
             <select id="quality">
                 <option value="0">Lossless</option>
-                <option value="15">High Quality</option>
                 <option value="25" selected>Balanced</option>
-                <option value="40">Small</option>
+                <option value="50">Crunchy</option>
             </select>
         </div>
     </div>
 
-    <button id="startBtn">Generate Sprite Sheet</button>
+    <button id="startBtn" disabled>Loading Engine...</button>
 
     <div class="progress-container" id="progContainer">
         <div class="progress-bg"><div id="progress-fill"></div></div>
-        <span id="percent-text">0%</span>
+        <div id="status">Waiting for input...</div>
     </div>
-
-    <div id="status">Initializing Engine...</div>
 </div>
 
 <div id="output">
-    <label>Right-click to save PNG</label><br>
+    <label>Resulting Sprite Sheet (Right-click to save)</label><br>
     <img id="preview">
 </div>
 
 <script>
     const { createFFmpeg, fetchFile } = FFmpeg;
     let targetFrames = 16;
-    
     const startBtn = document.getElementById('startBtn');
     const status = document.getElementById('status');
     const progFill = document.getElementById('progress-fill');
-    const percentText = document.getElementById('percent-text');
     const progContainer = document.getElementById('progContainer');
 
     const ffmpeg = createFFmpeg({ 
         log: true,
-        // This logger function intercepts FFmpeg output to update the bar
         logger: ({ message }) => {
             if (message.includes('frame=')) {
                 const match = message.match(/frame=\s*(\d+)/);
-                if (match && match[1]) {
-                    const currentFrame = parseInt(match[1]);
-                    const progress = Math.min(Math.round((currentFrame / targetFrames) * 100), 99);
-                    updateProgress(progress);
+                if (match) {
+                    const progress = Math.min(Math.round((parseInt(match[1]) / targetFrames) * 100), 100);
+                    progFill.style.width = progress + '%';
+                    status.innerText = `Processing: ${progress}%`;
                 }
             }
         }
     });
 
-    function updateProgress(val) {
-        progFill.style.width = val + '%';
-        percentText.innerText = val + '%';
-    }
-
-    async function loadEngine() {
-        try { 
-            await ffmpeg.load(); 
-            status.innerText = "Ready"; 
-        } catch (e) { 
-            status.innerText = "Security block. Refresh."; 
+    async function init() {
+        if (!window.crossOriginIsolated) {
+            status.innerText = "Security check failed. Please refresh.";
+            return;
+        }
+        try {
+            await ffmpeg.load();
+            startBtn.disabled = false;
+            startBtn.innerText = "Generate Sprite Sheet";
+            status.innerText = "Engine Ready";
+        } catch (e) {
+            status.innerText = "Engine error. Are you on Chrome/Edge?";
         }
     }
-    loadEngine();
+
+    init();
 
     startBtn.onclick = async () => {
         const file = document.getElementById('videoFile').files[0];
+        if (!file) return alert("Select a video!");
+
         const cols = parseInt(document.getElementById('cols').value);
         targetFrames = parseInt(document.getElementById('frameCount').value);
         const step = parseInt(document.getElementById('step').value);
         const crf = document.getElementById('quality').value;
 
-        if (!file) return alert("Select a video");
-
         startBtn.disabled = true;
         progContainer.style.display = 'block';
-        updateProgress(0);
-        status.innerText = "Crunching frames...";
+        status.innerText = "Uploading to Engine...";
 
         ffmpeg.FS('writeFile', 'input', await fetchFile(file));
 
         try {
             const filter = `select='not(mod(n\\,${step}))',setpts=N/FRAME_RATE/TB,format=yuva420p,tile=${cols}x${Math.ceil(targetFrames/cols)}`;
-
+            
             await ffmpeg.run(
                 '-vcodec', 'libvpx', 
                 '-i', 'input',
@@ -154,13 +155,12 @@
                 'sheet.png'
             );
 
-            updateProgress(100);
             const data = ffmpeg.FS('readFile', 'sheet.png');
             document.getElementById('preview').src = URL.createObjectURL(new Blob([data.buffer], { type: 'image/png' }));
             document.getElementById('output').style.display = 'block';
-            status.innerText = "Complete!";
+            status.innerText = "Success!";
         } catch (err) {
-            status.innerText = "Error. Check Console.";
+            status.innerText = "Error during process.";
         } finally {
             startBtn.disabled = false;
         }
