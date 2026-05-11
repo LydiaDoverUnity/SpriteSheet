@@ -2,17 +2,15 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Unity Alpha Sprite Sheet Gen v3.1</title>
+    <title>Unity Alpha Sprite Sheet Gen v3.2</title>
     
+    <script src="coi-serviceworker.js"></script>
+
     <script>
         if (!window.crossOriginIsolated) {
-            console.log("Security headers missing. Attempting to register Service Worker...");
             if ('serviceWorker' in navigator) {
                 navigator.serviceWorker.register('coi-serviceworker.js').then(() => {
-                    // Once registered, we MUST reload to activate the headers
                     setTimeout(() => { window.location.reload(); }, 500);
-                }).catch(err => {
-                    console.error("Worker failed:", err);
                 });
             }
         }
@@ -36,16 +34,21 @@
         #progress-fill { background: #00ffcc; height: 100%; width: 0%; transition: width 0.3s ease; }
         #status { margin-top: 15px; font-size: 11px; color: #00ffcc; text-align: center; font-family: monospace; }
         #output { margin-top: 30px; display: none; text-align: center; width: 100%; }
-        #preview { max-width: 100%; border: 2px solid #444; background: repeating-conic-gradient(#111 0% 25%, #222 0% 50%) 50% / 20px 20px; }
+        #preview { 
+            max-width: 100%; 
+            border: 2px solid #444; 
+            /* High-contrast checkerboard for visibility */
+            background: repeating-conic-gradient(#111 0% 25%, #222 0% 50%) 50% / 20px 20px; 
+        }
     </style>
 </head>
 <body>
 
 <div class="card">
-    <h2>Sprite Sheet Gen v3.1</h2>
+    <h2>Sprite Sheet Gen v3.2</h2>
     
     <div class="field">
-        <label>Video Input (WebM/MOV)</label>
+        <label>Video Input (WebM Alpha or ProRes .MOV)</label>
         <input type="file" id="videoFile" accept=".webm,.mov">
     </div>
 
@@ -68,14 +71,14 @@
         <div class="field">
             <label>Quality</label>
             <select id="quality">
-                <option value="0">Lossless</option>
+                <option value="0">Lossless (Best for Unity)</option>
                 <option value="25" selected>Balanced</option>
-                <option value="50">Crunchy</option>
+                <option value="50">Crunchy (Smallest)</option>
             </select>
         </div>
     </div>
 
-    <button id="startBtn" disabled>Loading Engine...</button>
+    <button id="startBtn" disabled>Initializing Engine...</button>
 
     <div class="progress-container" id="progContainer">
         <div class="progress-bg"><div id="progress-fill"></div></div>
@@ -112,7 +115,7 @@
 
     async function init() {
         if (!window.crossOriginIsolated) {
-            status.innerText = "Security check failed. Please refresh.";
+            status.innerText = "Security Check: Reloading...";
             return;
         }
         try {
@@ -121,7 +124,7 @@
             startBtn.innerText = "Generate Sprite Sheet";
             status.innerText = "Engine Ready";
         } catch (e) {
-            status.innerText = "Engine error. Are you on Chrome/Edge?";
+            status.innerText = "Engine error. Use Chrome or Edge.";
         }
     }
 
@@ -131,6 +134,7 @@
         const file = document.getElementById('videoFile').files[0];
         if (!file) return alert("Select a video!");
 
+        const fileName = file.name.toLowerCase();
         const cols = parseInt(document.getElementById('cols').value);
         targetFrames = parseInt(document.getElementById('frameCount').value);
         const step = parseInt(document.getElementById('step').value);
@@ -145,22 +149,28 @@
         try {
             const filter = `select='not(mod(n\\,${step}))',setpts=N/FRAME_RATE/TB,format=yuva420p,tile=${cols}x${Math.ceil(targetFrames/cols)}`;
             
-            await ffmpeg.run(
-                '-vcodec', 'libvpx', 
-                '-i', 'input',
-                '-vf', filter,
-                '-frames:v', '1',
-                '-pix_fmt', 'rgba',
-                '-crf', crf,
-                'sheet.png'
-            );
+            let args = [];
+            
+            // IF WebM, we force the libvpx decoder. 
+            // IF MOV, we let FFmpeg auto-detect (prores handles alpha natively)
+            if (fileName.endsWith('.webm')) {
+                args = ['-vcodec', 'libvpx', '-i', 'input'];
+            } else {
+                args = ['-i', 'input'];
+            }
+
+            // Combine with universal sprite sheet filters
+            args.push('-vf', filter, '-frames:v', '1', '-pix_fmt', 'rgba', '-crf', crf, 'sheet.png');
+            
+            await ffmpeg.run(...args);
 
             const data = ffmpeg.FS('readFile', 'sheet.png');
             document.getElementById('preview').src = URL.createObjectURL(new Blob([data.buffer], { type: 'image/png' }));
             document.getElementById('output').style.display = 'block';
-            status.innerText = "Success!";
+            status.innerText = "Success! Transparency Processed.";
         } catch (err) {
-            status.innerText = "Error during process.";
+            console.error(err);
+            status.innerText = "Error. Ensure .MOV is ProRes 4444.";
         } finally {
             startBtn.disabled = false;
         }
